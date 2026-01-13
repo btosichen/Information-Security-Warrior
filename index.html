@@ -70,7 +70,7 @@
         .story-text { font-size: 1.1rem; line-height: 1.6; margin-bottom: 20px; color: #374151; background: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid var(--primary); }
         .npc-box { display: flex; gap: 10px; margin-bottom: 20px; align-items: flex-start; }
         .npc-avatar { width: 50px; height: 50px; background: #ddd; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
-        .npc-dialogue { background: #fff; border: 1px solid #e5e7eb; padding: 12px; border-radius: 0 12px 12px 12px; font-size: 0.95rem; }
+        .npc-dialogue { background: #fff; border: 1px solid #e5e7eb; padding: 12px; border-radius: 0 12px 12px 12px; font-size: 0.95rem; width: 100%; }
         
         .items-bar { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 15px; }
         .item-btn { flex: 1; min-width: 80px; padding: 8px; font-size: 0.8rem; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0.7; }
@@ -169,7 +169,8 @@
                     <div class="npc-dialogue">
                         <strong id="npc-name">NPC</strong>
                         <p id="npc-msg">...</p>
-                        <div id="npc-choices" style="margin-top:8px; display:flex; gap:5px; flex-wrap:wrap;"></div>
+                        <!-- 這裡會動態插入小測驗按鈕 -->
+                        <div id="npc-choices" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content: flex-end;"></div>
                     </div>
                 </div>
             </div>
@@ -330,18 +331,69 @@ const QUESTION_POOL = [
 
 /**
  * 遊戲劇情文本 (10 關結構)
+ * 增加 quiz 物件，用於 NPC 互動小測驗
  */
 const GAME_SCENARIOS = [
-    { text: '你剛進入校園，發現學校門口的電子佈告欄閃爍異常，似乎有人試圖登入管理系統。', npc: '校門警衛', msg: '同學！系統怪怪的，你知道怎麼分辨這些登入畫面是不是假的嗎？', choice: '當然，我有學過資安！' },
-    { text: '來到電腦教室，同學小美正準備登入公用電腦，但她似乎不太在意周圍的人。', npc: '資安精靈', msg: '這種公用環境最危險了，提醒她一下吧！', choice: '好的，交給我。' },
-    { text: '教務處的印表機突然吐出一堆含有學生成績的廢紙，散落在地上。', npc: '教務主任', msg: '哎呀！這些都是個資啊！不能這樣亂丟，該怎麼處理？', choice: '這需要碎紙機或妥善銷毀。' },
-    { text: '你的信箱收到一封主旨為「恭喜中獎 iPhone 15」的信件，還附帶一個連結。', npc: '釣魚假冒者', msg: '嘿嘿，只要點下去填寫資料，手機就是你的囉...快點吧！', choice: '這看起來像釣魚，我才不點！' },
-    { text: '圖書館的查詢系統突然變得很慢，似乎遭受了大量的無效連線攻擊。', npc: '資安精靈', msg: '這看起來像是 DDoS 攻擊，正在消耗系統資源！', choice: '這是破壞可用性的攻擊。' },
-    { text: '在走廊上撿到一個標示「機密」的隨身碟，好奇心驅使你想把它插上電腦。', npc: '資安精靈', msg: '等等！來路不明的 USB 可是超級毒藥！', choice: '我會交給資訊組處理。' },
-    { text: '有同學正在社群網站上大肆討論隔壁班同學的八卦，甚至貼出了對方的診斷證明書。', npc: '教務主任', msg: '這已經觸犯法律了！那是敏感性個資啊！', choice: '我會去勸阻他們。' },
-    { text: '學校網站管理者帳號被盜用了，原來是因為密碼設成了「123456」。', npc: '資安精靈', msg: '弱密碼是資安大忌，快幫忙想個強密碼原則。', choice: '混合英數符號且定期更換。' },
-    { text: '駭客試圖竄改學校午餐菜單，把青菜全部改成炸雞。', npc: '廚房阿姨', msg: '雖然我很想煮炸雞，但這菜單被改過了吧？怎麼確認資料沒被改過？', choice: '這涉及資料的完整性。' },
-    { text: '最終決戰！駭客發動總攻擊，試圖竊取全校師生資料庫。', npc: '資安精靈', msg: '守護者，這是最後一關，拿出你所有的知識，啟動防火牆！', choice: '資安勇者，全軍出擊！' }
+    { 
+        text: '你剛進入校園，發現學校門口的電子佈告欄閃爍異常，似乎有人試圖登入管理系統。', 
+        npc: '校門警衛', 
+        msg: '同學！系統怪怪的，你知道怎麼分辨這些登入畫面是不是假的嗎？', 
+        quiz: { options: ['檢查網址(URL)正確性', '看圖片漂不漂亮'], answer: '檢查網址(URL)正確性' }
+    },
+    { 
+        text: '來到電腦教室，同學小美正準備登入公用電腦，但她似乎不太在意周圍的人。', 
+        npc: '資安精靈', 
+        msg: '這種公用環境最危險了，提醒她一下使用完該做什麼？', 
+        quiz: { options: ['直接關機離開', '登出並清除瀏覽紀錄'], answer: '登出並清除瀏覽紀錄' }
+    },
+    { 
+        text: '教務處的印表機突然吐出一堆含有學生成績的廢紙，散落在地上。', 
+        npc: '教務主任', 
+        msg: '哎呀！這些都是個資啊！不能這樣亂丟，該怎麼處理？', 
+        quiz: { options: ['丟資源回收桶', '使用碎紙機銷毀'], answer: '使用碎紙機銷毀' }
+    },
+    { 
+        text: '你的信箱收到一封主旨為「恭喜中獎 iPhone 15」的信件，還附帶一個連結。', 
+        npc: '釣魚假冒者', 
+        msg: '嘿嘿，只要點下去填寫資料，手機就是你的囉...快點吧！', 
+        quiz: { options: ['這是釣魚，我不點', '馬上點擊領獎'], answer: '這是釣魚，我不點' }
+    },
+    { 
+        text: '圖書館的查詢系統突然變得很慢，似乎遭受了大量的無效連線攻擊。', 
+        npc: '資安精靈', 
+        msg: '這看起來像是 DDoS 攻擊，這種讓系統無法使用的攻擊是破壞了什麼？', 
+        quiz: { options: ['可用性(Availability)', '機密性(Confidentiality)'], answer: '可用性(Availability)' }
+    },
+    { 
+        text: '在走廊上撿到一個標示「機密」的隨身碟，好奇心驅使你想把它插上電腦。', 
+        npc: '資安精靈', 
+        msg: '等等！來路不明的 USB 可是超級毒藥！你該怎麼做？', 
+        quiz: { options: ['先插看看有什麼', '交給資訊組/不亂插'], answer: '交給資訊組/不亂插' }
+    },
+    { 
+        text: '有同學正在社群網站上大肆討論隔壁班同學的八卦，甚至貼出了對方的診斷證明書。', 
+        npc: '教務主任', 
+        msg: '這已經觸犯法律了！那是敏感性個資啊！你該怎麼做？', 
+        quiz: { options: ['加入討論按讚', '勸阻並檢舉'], answer: '勸阻並檢舉' }
+    },
+    { 
+        text: '學校網站管理者帳號被盜用了，原來是因為密碼設成了「123456」。', 
+        npc: '資安精靈', 
+        msg: '弱密碼是資安大忌，快幫忙想個強密碼原則。', 
+        quiz: { options: ['使用英數符號混合', '使用生日+電話'], answer: '使用英數符號混合' }
+    },
+    { 
+        text: '駭客試圖竄改學校午餐菜單，把青菜全部改成炸雞。', 
+        npc: '廚房阿姨', 
+        msg: '雖然我很想煮炸雞，但這菜單被改過了吧？我們需要確認資料的什麼特性？', 
+        quiz: { options: ['完整性(Integrity)', '機密性(Confidentiality)'], answer: '完整性(Integrity)' }
+    },
+    { 
+        text: '最終決戰！駭客發動總攻擊，試圖竊取全校師生資料庫。', 
+        npc: '資安精靈', 
+        msg: '守護者，這是最後一關，你準備好面對挑戰了嗎？', 
+        quiz: { options: ['我準備好了！', '再等一下'], answer: '我準備好了！' }
+    }
 ];
 
 const App = {
@@ -367,9 +419,9 @@ const App = {
     // 初始化
     init() {
         this.loadTeacherConfig();
-        const savedData = localStorage.getItem('edu_security_game_history');
         // 確保按鈕事件綁定
-        document.getElementById('login-class').focus();
+        const loginInput = document.getElementById('login-class');
+        if(loginInput) loginInput.focus();
     },
 
     loadTeacherConfig() {
@@ -475,17 +527,44 @@ const App = {
         document.getElementById('npc-msg').textContent = scenario.msg;
         document.getElementById('npc-avatar').textContent = ['👨‍🏫','🧚‍♀️','🦹','🤖'][levelIdx % 4]; // 隨機頭像
 
-        // NPC 選項 (裝飾性互動)
+        // NPC 選項 / 互動小測驗
         const choicesDiv = document.getElementById('npc-choices');
         choicesDiv.innerHTML = '';
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-small btn-secondary';
-        btn.textContent = scenario.choice;
-        btn.onclick = () => {
-            document.getElementById('scene-area').style.display = 'none';
-            this.showQuestion();
-        };
-        choicesDiv.appendChild(btn);
+        
+        // 渲染互動測驗按鈕
+        if (scenario.quiz && scenario.quiz.options) {
+            // 隨機排列選項按鈕
+            let opts = [...scenario.quiz.options];
+            opts.sort(() => Math.random() - 0.5);
+            
+            opts.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-small btn-secondary';
+                btn.textContent = opt;
+                btn.onclick = () => {
+                    // 檢查答案
+                    if (opt === scenario.quiz.answer) {
+                        // 答對，進入題目
+                        document.getElementById('scene-area').style.display = 'none';
+                        this.showQuestion();
+                    } else {
+                        // 答錯，提示
+                        alert('❌ 觀念有點小誤差喔！\n\n' + scenario.npc + ' 表示：「再想一想，這樣做真的安全嗎？」');
+                    }
+                };
+                choicesDiv.appendChild(btn);
+            });
+        } else {
+            // 舊版兼容 (若無 quiz 設定)
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-small btn-secondary';
+            btn.textContent = '我知道了，進入挑戰';
+            btn.onclick = () => {
+                document.getElementById('scene-area').style.display = 'none';
+                this.showQuestion();
+            };
+            choicesDiv.appendChild(btn);
+        }
 
         document.getElementById('scene-area').style.display = 'block';
         document.getElementById('quiz-area').style.display = 'none';
