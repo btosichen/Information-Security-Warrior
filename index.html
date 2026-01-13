@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資安勇者：校園資料守護戰</title>
+    <title>資安勇者：校園資料守護戰v1.1</title>
     <!-- 
         GitHub Pages 部署 3 步驟：
         1. 建立 GitHub Repository。
@@ -276,6 +276,20 @@
             <strong>🧾 稽核紀錄詳細分析：</strong><br><span id="audit-text"></span>
         </div>
         <button class="btn" onclick="app.closeFeedback()">下一關 ➔</button>
+    </div>
+</div>
+
+<!-- 老師密碼驗證 Modal -->
+<div class="modal-overlay" id="password-modal">
+    <div class="modal">
+        <h3>🔐 老師專區驗證</h3>
+        <p style="margin: 15px 0; color: #555;">請輸入管理密碼</p>
+        <!-- type="password" 確保顯示星號或圓點 -->
+        <input type="password" id="teacher-pwd-input" placeholder="密碼" style="margin-bottom: 15px;" onkeyup="if(event.key==='Enter') app.checkTeacherPassword()">
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button class="btn btn-secondary btn-small" onclick="app.closePasswordModal()">取消</button>
+            <button class="btn btn-small" onclick="app.checkTeacherPassword()">確認</button>
+        </div>
     </div>
 </div>
 
@@ -803,6 +817,23 @@ const App = {
     // --- 老師後台功能 ---
 
     toggleTeacherPanel() {
+        const modal = document.getElementById('password-modal');
+        const input = document.getElementById('teacher-pwd-input');
+        if(modal && input) {
+            input.value = ''; // clear previous input
+            modal.style.display = 'flex';
+            input.focus();
+        }
+    },
+
+    closePasswordModal() {
+        document.getElementById('password-modal').style.display = 'none';
+    },
+
+    checkTeacherPassword() {
+        const input = document.getElementById('teacher-pwd-input');
+        const pwd = input.value;
+
         // 簡單的雜湊函數，避免密碼明文直接暴露在原始碼中
         // 目標密碼: 0426 -> hash: 1481544
         const checkHash = (s) => {
@@ -814,14 +845,15 @@ const App = {
             }
             return h;
         };
-
-        const pwd = prompt("請輸入教師密碼");
         
-        if (pwd && checkHash(pwd) === 1481544) {
+        if (checkHash(pwd) === 1481544) {
+            this.closePasswordModal();
             this.renderDashboard();
             this.switchScreen('screen-dashboard');
         } else {
-            if (pwd !== null) alert("密碼錯誤");
+            alert("密碼錯誤");
+            input.value = '';
+            input.focus();
         }
     },
 
