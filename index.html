@@ -724,8 +724,21 @@ const App = {
     // --- 老師後台功能 ---
 
     toggleTeacherPanel() {
-        const pwd = prompt("請輸入教師密碼 (預設: admin)");
-        if (pwd === 'admin') {
+        // 簡單的雜湊函數，避免密碼明文直接暴露在原始碼中
+        // 目標密碼: 0426 -> hash: 1481544
+        const checkHash = (s) => {
+            let h = 0;
+            for(let i=0; i<s.length; i++) {
+                // (h << 5) - h 等同於 h * 31
+                h = ((h << 5) - h) + s.charCodeAt(i);
+                h |= 0; // 轉為 32bit 整數
+            }
+            return h;
+        };
+
+        const pwd = prompt("請輸入教師密碼");
+        
+        if (pwd && checkHash(pwd) === 1481544) {
             this.renderDashboard();
             this.switchScreen('screen-dashboard');
         } else {
