@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資安勇者：校園資料守護戰v1.2</title>
+    <title>資安勇者：校園資料守護戰v1.3</title>
     <!-- 
         GitHub Pages 部署 3 步驟：
         1. 建立 GitHub Repository。
@@ -83,6 +83,51 @@
         .option-btn { text-align: left; padding: 15px; background: white; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; cursor: pointer; }
         .option-btn:hover { border-color: var(--primary); background: #eef2ff; }
         .option-btn.hidden-opt { display: none; }
+
+        /* Mini Game Styles */
+        #minigame-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            background: #1e1e2e;
+            border-radius: 16px;
+            overflow: hidden;
+            display: none;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+            cursor: crosshair;
+        }
+        #minigame-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .minigame-ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .minigame-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            z-index: 3;
+            text-align: center;
+            padding: 20px;
+        }
 
         /* Animations */
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -172,6 +217,31 @@
                         <!-- 這裡會動態插入小測驗按鈕 -->
                         <div id="npc-choices" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content: flex-end;"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- 小遊戲區域 (射擊飛靶) -->
+            <div id="minigame-container">
+                <div class="minigame-ui">
+                    <span id="mg-score">得分: 0</span>
+                    <span id="mg-timer">時間: 20s</span>
+                </div>
+                <canvas id="minigame-canvas" width="600" height="400"></canvas>
+                <!-- 遊戲說明遮罩 -->
+                <div id="mg-start-overlay" class="minigame-overlay">
+                    <h2 style="color: #fbbf24; margin-bottom:10px;">⚠️ 系統遭遇大量封包！</h2>
+                    <p style="margin-bottom: 20px; font-size: 1.1rem;">
+                        啟動防火牆防禦模式！<br>
+                        請點擊擊落 <span style="color:#ef4444; font-weight:bold;">紅色威脅</span> (病毒、釣魚)<br>
+                        <span style="color:#10b981; font-weight:bold;">不要攻擊</span> 綠色安全封包
+                    </p>
+                    <button class="btn" style="width: auto; padding: 10px 30px;" onclick="miniGame.start()">開始防禦</button>
+                </div>
+                <!-- 遊戲結束遮罩 -->
+                <div id="mg-end-overlay" class="minigame-overlay" style="display: none;">
+                    <h2>防禦結束</h2>
+                    <p id="mg-result-msg">統計中...</p>
+                    <button class="btn" style="width: auto;" onclick="miniGame.finish()">繼續任務</button>
                 </div>
             </div>
 
@@ -346,6 +416,7 @@ const QUESTION_POOL = [
 /**
  * 遊戲劇情文本 (10 關結構)
  * 增加 quiz 物件，用於 NPC 互動小測驗
+ * 增加 special: 'shooting'，用於第5關觸發射擊小遊戲
  */
 const GAME_SCENARIOS = [
     { 
@@ -372,11 +443,13 @@ const GAME_SCENARIOS = [
         msg: '嘿嘿，只要點下去填寫資料，手機就是你的囉...快點吧！', 
         quiz: { options: ['這是釣魚，我不點', '馬上點擊領獎'], answer: '這是釣魚，我不點' }
     },
+    // 第 5 關：特殊射擊遊戲
     { 
-        text: '圖書館的查詢系統突然變得很慢，似乎遭受了大量的無效連線攻擊。', 
+        text: '警告！圖書館系統正遭受大規模封包攻擊！這不是演習！', 
         npc: '資安精靈', 
-        msg: '這看起來像是 DDoS 攻擊，這種讓系統無法使用的攻擊是破壞了什麼？', 
-        quiz: { options: ['可用性(Availability)', '機密性(Confidentiality)'], answer: '可用性(Availability)' }
+        msg: '勇者！防火牆快撐不住了，請手動攔截惡意封包，保護正常資料！', 
+        special: 'shooting', // 標記為射擊遊戲關卡
+        quiz: { options: ['啟動防禦系統', '我需要支援'], answer: '啟動防禦系統' }
     },
     { 
         text: '在走廊上撿到一個標示「機密」的隨身碟，好奇心驅使你想把它插上電腦。', 
@@ -410,6 +483,188 @@ const GAME_SCENARIOS = [
     }
 ];
 
+// 射擊遊戲邏輯模組
+const MiniGame = {
+    canvas: null,
+    ctx: null,
+    isActive: false,
+    score: 0,
+    timer: 20,
+    targets: [],
+    lastSpawn: 0,
+    spawnRate: 800, // ms
+    animationFrame: null,
+    
+    // 定義目標詞彙 (Bad = 紅色可射擊, Good = 綠色不可射擊)
+    badTerms: ['病毒', '釣魚信', '勒索軟體', '弱密碼', '木馬', '惡意連結', '詐騙簡訊', '假Wifi'],
+    goodTerms: ['HTTPS', '防火牆', '強密碼', '定期備份', '雙重驗證', '系統更新', '加密傳輸'],
+
+    init() {
+        this.canvas = document.getElementById('minigame-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        // 綁定點擊事件 (支援滑鼠與觸控)
+        this.canvas.addEventListener('mousedown', (e) => this.handleClick(e));
+        this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // 防止滾動
+            const touch = e.touches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            this.shoot(touch.clientX - rect.left, touch.clientY - rect.top);
+        });
+    },
+
+    start() {
+        this.isActive = true;
+        this.score = 0;
+        this.timer = 20; // 20秒
+        this.targets = [];
+        this.lastSpawn = 0;
+        
+        document.getElementById('mg-start-overlay').style.display = 'none';
+        document.getElementById('mg-end-overlay').style.display = 'none';
+        
+        // 倒數計時
+        this.timerInterval = setInterval(() => {
+            this.timer--;
+            document.getElementById('mg-timer').textContent = `時間: ${this.timer}s`;
+            if (this.timer <= 0) this.end();
+        }, 1000);
+
+        this.loop();
+    },
+
+    loop(timestamp) {
+        if (!this.isActive) return;
+
+        // 生成目標
+        if (!this.lastSpawn || timestamp - this.lastSpawn > this.spawnRate) {
+            this.spawnTarget();
+            this.lastSpawn = timestamp;
+            // 隨時間加快生成速度
+            if (this.spawnRate > 400) this.spawnRate -= 10;
+        }
+
+        this.update();
+        this.draw();
+
+        this.animationFrame = requestAnimationFrame((t) => this.loop(t));
+    },
+
+    spawnTarget() {
+        const isBad = Math.random() > 0.4; // 60% 機率是壞蛋
+        const text = isBad 
+            ? this.badTerms[Math.floor(Math.random() * this.badTerms.length)] 
+            : this.goodTerms[Math.floor(Math.random() * this.goodTerms.length)];
+        
+        const radius = 35;
+        const x = Math.random() * (this.canvas.width - 2 * radius) + radius;
+        const y = this.canvas.height + radius; // 從底部生成
+        
+        this.targets.push({
+            x, y, radius, text, isBad,
+            speed: Math.random() * 2 + 1.5, // 速度 1.5 ~ 3.5
+            hit: false
+        });
+    },
+
+    update() {
+        // 更新位置
+        this.targets.forEach(t => t.y -= t.speed);
+        // 移除超出畫面的
+        this.targets = this.targets.filter(t => t.y + t.radius > -50 && !t.hit);
+    },
+
+    draw() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.targets.forEach(t => {
+            this.ctx.beginPath();
+            this.ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
+            // 壞蛋是紅色，好人是綠色
+            this.ctx.fillStyle = t.isBad ? '#ef4444' : '#10b981';
+            this.ctx.fill();
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.stroke();
+
+            // 文字
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = 'bold 14px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(t.text, t.x, t.y);
+        });
+    },
+
+    handleClick(e) {
+        if (!this.isActive) return;
+        const rect = this.canvas.getBoundingClientRect();
+        // 計算縮放比例 (因為 CSS 可能縮放 Canvas)
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        this.shoot(x, y);
+    },
+
+    shoot(x, y) {
+        let hitSomething = false;
+
+        // 檢查是否擊中 (從最後生成的開始檢查，即最上層)
+        for (let i = this.targets.length - 1; i >= 0; i--) {
+            const t = this.targets[i];
+            const dist = Math.sqrt((x - t.x) ** 2 + (y - t.y) ** 2);
+            
+            if (dist < t.radius) {
+                // 擊中！
+                t.hit = true;
+                hitSomething = true;
+                
+                if (t.isBad) {
+                    this.score += 10;
+                    this.showFloatText(t.x, t.y, "+10", "#fbbf24");
+                } else {
+                    this.score -= 10;
+                    this.showFloatText(t.x, t.y, "-10", "#ef4444");
+                }
+                
+                document.getElementById('mg-score').textContent = `得分: ${this.score}`;
+                break; // 一次只打一個
+            }
+        }
+    },
+
+    showFloatText(x, y, text, color) {
+        // 簡單的浮動文字效果 (畫在 Canvas 上會比較複雜，這裡偷懶暫時不畫特效，只更新分數UI)
+        // 若要精緻，可以增加 effect 陣列在 draw 迴圈中繪製
+    },
+
+    end() {
+        this.isActive = false;
+        clearInterval(this.timerInterval);
+        cancelAnimationFrame(this.animationFrame);
+        
+        const overlay = document.getElementById('mg-end-overlay');
+        const msg = document.getElementById('mg-result-msg');
+        overlay.style.display = 'flex';
+        
+        let rank = '';
+        if (this.score >= 100) rank = '資安神射手！';
+        else if (this.score >= 50) rank = '防禦成功！';
+        else rank = '防禦網有漏洞...';
+
+        msg.innerHTML = `最終得分：<span style="font-size:1.5rem; color:#fbbf24">${this.score}</span><br>${rank}`;
+    },
+
+    finish() {
+        // 結束小遊戲，將分數加回主遊戲並進入下一關
+        app.finishMiniGame(this.score);
+    }
+};
+
+const miniGame = MiniGame;
+
+
 const App = {
     // 狀態
     state: {
@@ -433,6 +688,7 @@ const App = {
     // 初始化
     init() {
         this.loadTeacherConfig();
+        miniGame.init(); // 初始化小遊戲
         // 確保按鈕事件綁定
         const loginInput = document.getElementById('login-class');
         if(loginInput) loginInput.focus();
@@ -534,6 +790,9 @@ const App = {
         document.getElementById('game-score').textContent = `🏆 ${this.state.score}`;
         document.getElementById('progress-fill').style.width = `${(levelIdx / 10) * 100}%`;
 
+        // 隱藏小遊戲區，重置一般題目區
+        document.getElementById('minigame-container').style.display = 'none';
+        
         // 載入劇情
         const scenario = GAME_SCENARIOS[levelIdx] || GAME_SCENARIOS[0];
         document.getElementById('story-text').textContent = scenario.text;
@@ -558,9 +817,16 @@ const App = {
                 btn.onclick = () => {
                     // 檢查答案
                     if (opt === scenario.quiz.answer) {
-                        // 答對，進入題目
+                        // 答對，進入題目 (或小遊戲)
                         document.getElementById('scene-area').style.display = 'none';
-                        this.showQuestion();
+                        
+                        // 判斷是否為特殊關卡 (射擊遊戲)
+                        if (scenario.special === 'shooting') {
+                             this.showMiniGame();
+                        } else {
+                             this.showQuestion();
+                        }
+
                     } else {
                         // 答錯，提示
                         alert('❌ 觀念有點小誤差喔！\n\n' + scenario.npc + ' 表示：「再想一想，這樣做真的安全嗎？」');
@@ -575,7 +841,11 @@ const App = {
             btn.textContent = '我知道了，進入挑戰';
             btn.onclick = () => {
                 document.getElementById('scene-area').style.display = 'none';
-                this.showQuestion();
+                if (scenario.special === 'shooting') {
+                     this.showMiniGame();
+                } else {
+                     this.showQuestion();
+                }
             };
             choicesDiv.appendChild(btn);
         }
@@ -585,6 +855,36 @@ const App = {
         
         // 重置道具按鈕狀態 (如果是選擇題才可用防火牆)
         this.updateInventoryUI();
+    },
+
+    showMiniGame() {
+        document.getElementById('quiz-area').style.display = 'none';
+        document.getElementById('minigame-container').style.display = 'block';
+        document.getElementById('mg-start-overlay').style.display = 'flex'; // 顯示開始遮罩
+    },
+
+    finishMiniGame(score) {
+        // 小遊戲結束處理
+        // 加分
+        if (score > 0) this.state.score += score;
+        
+        // 紀錄這一關 (模擬一個 Question 紀錄，方便後台查看)
+        this.state.history.push({
+            qId: 'minigame_lv5',
+            qText: '【射擊挑戰】攔截惡意封包',
+            type: 'minigame',
+            studentAnswer: `得分 ${score}`,
+            correctAnswer: 'N/A',
+            isCorrect: score >= 50, // 50分算及格
+            timeSpent: 20,
+            itemUsed: '',
+            scoreAfter: this.state.score,
+            explanation: '主動防禦是資安的重要一環！辨識威脅並予以攔截。'
+        });
+
+        // 直接進入下一關
+        this.state.level++;
+        this.loadLevel();
     },
 
     showQuestion() {
@@ -633,6 +933,11 @@ const App = {
         if (this.state.inventory[type] <= 0) return;
         const q = this.state.currentQ;
         const btns = document.querySelectorAll('.option-btn');
+        // 小遊戲時不能用道具
+        if (document.getElementById('minigame-container').style.display === 'block') {
+            alert("戰鬥中無法使用道具！專心射擊！");
+            return;
+        }
 
         if (type === 'firewall') {
             if (q.type !== 'choice') { alert('防火牆只能用於選擇題！'); return; }
